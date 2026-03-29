@@ -9,7 +9,6 @@ A Discord bot for coordinating FFXIV static raid schedules. Manages recurring ra
 - **Extra day proposals** with optional 8-person polls, auto-closing, and non-voter pinging
 - **Raid reminders** that ping the static member role at a configurable interval before each raid
 - **Cancellation tracking** for regular nights; cancelling an extra day removes it entirely
-- **Rescheduling** limited to FFXIV-relevant days (Friday–Monday) with vote buttons
 
 ## Commands
 
@@ -44,12 +43,6 @@ A Discord bot for coordinating FFXIV static raid schedules. Manages recurring ra
 | `/extraday propose` | Anyone | Interactive wizard to propose an extra raid day with optional poll |
 | `/extraday cancel [poll_id]` | Raid Lead | Cancel an active extra day poll |
 | `/extraday list` | Anyone | Show active extra day polls |
-
-### Rescheduling
-
-| Command | Role | Description |
-|---|---|---|
-| `/reschedule <date> <day> [hour] [minute]` | Anyone | Propose moving a raid to Fri/Sat/Sun/Mon with vote buttons |
 
 ### Other
 

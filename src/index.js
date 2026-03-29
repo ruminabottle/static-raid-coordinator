@@ -360,38 +360,6 @@ async function handleComponent(interaction) {
   // VOTE HANDLERS
   // ════════════════════════════════════════
 
-  // Reschedule votes
-  else if (id.startsWith('reschedule_yes_') || id.startsWith('reschedule_no_')) {
-    const vote = id.includes('_yes_') ? 'yes' : 'no';
-    const proposalId = parseInt(id.split('_').pop());
-
-    db.prepare(`
-      INSERT INTO reschedule_votes (proposal_id, user_id, vote) VALUES (?, ?, ?)
-      ON CONFLICT(proposal_id, user_id) DO UPDATE SET vote = excluded.vote
-    `).run(proposalId, interaction.user.id, vote);
-
-    const yes = db.prepare("SELECT COUNT(*) as c FROM reschedule_votes WHERE proposal_id = ? AND vote = 'yes'").get(proposalId).c;
-    const no = db.prepare("SELECT COUNT(*) as c FROM reschedule_votes WHERE proposal_id = ? AND vote = 'no'").get(proposalId).c;
-
-    await interaction.reply({ content: `Vote recorded! Current tally: **${yes}** yes / **${no}** no`, flags: 64 });
-  }
-
-  // Optional day votes
-  else if (id.startsWith('optional_yes_') || id.startsWith('optional_no_')) {
-    const vote = id.includes('_yes_') ? 'yes' : 'no';
-    const optionalId = parseInt(id.split('_').pop());
-
-    db.prepare(`
-      INSERT INTO optional_day_votes (optional_day_id, user_id, vote) VALUES (?, ?, ?)
-      ON CONFLICT(optional_day_id, user_id) DO UPDATE SET vote = excluded.vote
-    `).run(optionalId, interaction.user.id, vote);
-
-    const yes = db.prepare("SELECT COUNT(*) as c FROM optional_day_votes WHERE optional_day_id = ? AND vote = 'yes'").get(optionalId).c;
-    const no = db.prepare("SELECT COUNT(*) as c FROM optional_day_votes WHERE optional_day_id = ? AND vote = 'no'").get(optionalId).c;
-
-    await interaction.reply({ content: `Vote recorded! Current tally: **${yes}** in / **${no}** out`, flags: 64 });
-  }
-
   // Extra day poll votes
   else if (id.startsWith('extra_yes_') || id.startsWith('extra_no_')) {
     const vote = id.includes('_yes_') ? 'yes' : 'no';

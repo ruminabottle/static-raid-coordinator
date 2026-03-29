@@ -119,7 +119,7 @@ module.exports = {
     if (channel) {
       await channel.send(
         `<@${userId}> has cancelled for **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>).${reasonStr}\n\n` +
-        `If the group needs to reschedule, use \`/reschedule\`.`
+        `If the group needs to reschedule, use \`/extraday propose\` to pick a new day.`
       );
     }
 

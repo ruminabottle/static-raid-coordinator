@@ -29,9 +29,6 @@ module.exports = {
       `> \`/extraday cancel [poll_id]\` — Cancel an active extra day poll *(Raid Lead)*\n` +
       `> \`/extraday list\` — Show active extra day polls\n\n` +
 
-      `**Rescheduling**\n` +
-      `> \`/reschedule <date> <day> [hour] [minute]\` — Propose moving a raid to Fri/Sat/Sun/Mon\n\n` +
-
       `**Roles**\n` +
       `> **Raid Lead** — Can manage schedule, reminders, and cancel polls\n` +
       `> **Static Member** — Required to vote on extra day polls (assign to all 8 raiders)`;
