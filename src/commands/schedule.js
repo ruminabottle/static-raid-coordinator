@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { DateTime } = require('luxon');
 const db = require('../db/database');
-const { DAY_NAMES, getNextTimestamp } = require('../timeutils');
+const { DAY_NAMES, getNextTimestamp, getNextOccurrence, formatTime } = require('../timeutils');
 const { scheduleStep1 } = require('../wizards');
 const { scheduleState } = require('../wizard-state');
 
@@ -24,7 +24,10 @@ module.exports = {
             .addChoices(...DAY_CHOICES)))
     .addSubcommand(sub =>
       sub.setName('view')
-        .setDescription('View the current raid schedule')),
+        .setDescription('View the recurring weekly raid pattern'))
+    .addSubcommand(sub =>
+      sub.setName('week')
+        .setDescription('View this week\'s raid lineup with cancellations and extra days')),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -55,52 +58,119 @@ module.exports = {
       }
       await interaction.reply(`Removed **${DAY_NAMES[day]}** from the raid schedule.`);
     } else if (sub === 'view') {
-      const schedules = db.prepare('SELECT * FROM raid_schedule WHERE guild_id = ? ORDER BY day_of_week').all(guildId);
-
-      if (schedules.length === 0) {
-        return interaction.reply('No raid days scheduled yet. Use `/schedule set` to add days.');
-      }
-
-      const config = db.prepare('SELECT * FROM guild_config WHERE guild_id = ?').get(guildId);
-      const tz = config?.timezone || 'America/New_York';
-      const now = DateTime.now().setZone(tz);
-
-      const lines = schedules.map(s => {
-        const ts = getNextTimestamp(s.day_of_week, s.hour, s.minute, tz);
-        return `- **${DAY_NAMES[s.day_of_week]}** at <t:${ts}:t> (<t:${ts}:R>)`;
-      });
-
-      let msg = `**Raid Schedule**\n${lines.join('\n')}`;
-
-      const extraDays = db.prepare(
-        'SELECT * FROM extra_day_polls WHERE guild_id = ? AND confirmed = 1 ORDER BY proposed_date'
-      ).all(guildId);
-
-      const upcomingExtras = extraDays.filter(e => {
-        const extraTime = DateTime.fromISO(e.proposed_date, { zone: tz })
-          .set({ hour: e.hour, minute: e.minute });
-        return extraTime > now;
-      });
-
-      const pastExtras = extraDays.filter(e => {
-        const extraTime = DateTime.fromISO(e.proposed_date, { zone: tz })
-          .set({ hour: e.hour, minute: e.minute });
-        return extraTime <= now;
-      });
-      for (const past of pastExtras) {
-        db.prepare('UPDATE extra_day_polls SET closed = 1 WHERE id = ?').run(past.id);
-      }
-
-      if (upcomingExtras.length > 0) {
-        const extraLines = upcomingExtras.map(e => {
-          const dayOfWeek = new Date(e.proposed_date + 'T00:00:00').getUTCDay();
-          const ts = getNextTimestamp(dayOfWeek, e.hour, e.minute, tz);
-          return `- **${DAY_NAMES[dayOfWeek]}, ${e.proposed_date}** at <t:${ts}:t> (<t:${ts}:R>)`;
-        });
-        msg += `\n\n**Upcoming Extra Days**\n${extraLines.join('\n')}`;
-      }
-
-      await interaction.reply(msg);
+      await handleView(interaction, guildId);
+    } else if (sub === 'week') {
+      await handleWeek(interaction, guildId);
     }
   },
 };
+
+// Recurring weekly pattern
+async function handleView(interaction, guildId) {
+  const schedules = db.prepare('SELECT * FROM raid_schedule WHERE guild_id = ? ORDER BY day_of_week').all(guildId);
+
+  if (schedules.length === 0) {
+    return interaction.reply('No raid days scheduled yet. Use `/schedule set` to add days.');
+  }
+
+  const config = db.prepare('SELECT * FROM guild_config WHERE guild_id = ?').get(guildId);
+  const tz = config?.timezone || 'America/New_York';
+
+  const lines = schedules.map(s => {
+    const timeStr = formatTime(s.hour, s.minute);
+    const ts = getNextTimestamp(s.day_of_week, s.hour, s.minute, tz);
+    return `- **${DAY_NAMES[s.day_of_week]}** at ${timeStr} (<t:${ts}:t> your time)`;
+  });
+
+  await interaction.reply(`**Weekly Raid Schedule** (${tz})\n${lines.join('\n')}`);
+}
+
+// This week's actual lineup
+async function handleWeek(interaction, guildId) {
+  const config = db.prepare('SELECT * FROM guild_config WHERE guild_id = ?').get(guildId);
+  if (!config) {
+    return interaction.reply({ content: 'Run `/setup` first.', flags: 64 });
+  }
+
+  const tz = config.timezone || 'America/New_York';
+  const now = DateTime.now().setZone(tz);
+  const schedules = db.prepare('SELECT * FROM raid_schedule WHERE guild_id = ? ORDER BY day_of_week').all(guildId);
+
+  // Build list of upcoming raid nights this week (next 7 days)
+  const raidNights = [];
+
+  // Regular nights
+  for (const s of schedules) {
+    const dt = getNextOccurrence(s.day_of_week, s.hour, s.minute, tz);
+    if (dt.diff(now, 'days').days <= 7) {
+      const dateStr = dt.toFormat('yyyy-MM-dd');
+      const ts = Math.floor(dt.toSeconds());
+
+      // Check if this night is cancelled
+      const cancellation = db.prepare(
+        'SELECT user_id, reason FROM cancellations WHERE guild_id = ? AND raid_date = ?'
+      ).get(guildId, dateStr);
+
+      raidNights.push({
+        date: dateStr,
+        dt,
+        ts,
+        dayName: DAY_NAMES[s.day_of_week],
+        type: 'regular',
+        cancelled: !!cancellation,
+        cancelledBy: cancellation?.user_id,
+        cancelReason: cancellation?.reason,
+      });
+    }
+  }
+
+  // Extra days
+  const extraDays = db.prepare(
+    'SELECT * FROM extra_day_polls WHERE guild_id = ? AND confirmed = 1 ORDER BY proposed_date'
+  ).all(guildId);
+
+  for (const e of extraDays) {
+    const extraTime = DateTime.fromISO(e.proposed_date, { zone: tz })
+      .set({ hour: e.hour, minute: e.minute });
+
+    if (extraTime <= now) {
+      db.prepare('UPDATE extra_day_polls SET closed = 1 WHERE id = ?').run(e.id);
+      continue;
+    }
+
+    if (extraTime.diff(now, 'days').days <= 7) {
+      const dayOfWeek = new Date(e.proposed_date + 'T00:00:00').getUTCDay();
+      const ts = Math.floor(extraTime.toSeconds());
+
+      raidNights.push({
+        date: e.proposed_date,
+        dt: extraTime,
+        ts,
+        dayName: DAY_NAMES[dayOfWeek],
+        type: 'extra',
+        cancellations: [],
+      });
+    }
+  }
+
+  if (raidNights.length === 0) {
+    return interaction.reply('No raids scheduled in the next 7 days.');
+  }
+
+  // Sort by date
+  raidNights.sort((a, b) => a.dt.toMillis() - b.dt.toMillis());
+
+  const lines = raidNights.map(r => {
+    if (r.cancelled) {
+      const reason = r.cancelReason ? ` — *${r.cancelReason}*` : '';
+      return `- ~~**${r.dayName}, ${r.date}**~~ **CANCELLED** by <@${r.cancelledBy}>${reason}`;
+    }
+
+    let line = `- **${r.dayName}, ${r.date}** at <t:${r.ts}:t> (<t:${r.ts}:R>)`;
+    if (r.type === 'extra') line += ' *(extra)*';
+
+    return line;
+  });
+
+  await interaction.reply(`**This Week's Raids**\n${lines.join('\n')}`);
+}

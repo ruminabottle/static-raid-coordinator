@@ -13,7 +13,8 @@ module.exports = {
       `> \`/setup #channel\` — Initialize the bot, create roles, set announcement channel *(Admin)*\n` +
       `> \`/schedule set\` — Interactive raid schedule setup *(Raid Lead)*\n` +
       `> \`/schedule remove <day>\` — Remove a raid day *(Raid Lead)*\n` +
-      `> \`/schedule view\` — View the raid schedule + upcoming extra days\n\n` +
+      `> \`/schedule view\` — View the recurring weekly raid pattern\n` +
+      `> \`/schedule week\` — View this week's raids with cancellations and extra days\n\n` +
 
       `**Reminders**\n` +
       `> \`/reminder set <minutes>\` — Set how far in advance reminders fire *(Raid Lead)*\n` +
@@ -21,8 +22,9 @@ module.exports = {
       `> \`/reminder disable\` — Turn off reminders *(Raid Lead)*\n\n` +
 
       `**Attendance**\n` +
-      `> \`/cancel [date] [reason]\` — Cancel for a raid night (defaults to next raid)\n` +
-      `> \`/status\` — Show who's in/out for the next raid\n\n` +
+      `> \`/cancel [date] [reason]\` — Cancel a raid night for everyone (defaults to next raid)\n` +
+      `> \`/uncancel [date]\` — Reinstate a cancelled raid night\n` +
+      `> \`/status\` — Show the next upcoming raid\n\n` +
 
       `**Extra Days**\n` +
       `> \`/extraday propose\` — Propose an extra raid day (interactive wizard)\n` +

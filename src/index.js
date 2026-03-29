@@ -312,6 +312,30 @@ async function handleComponent(interaction) {
 
     const guildId = interaction.guild.id;
     const config = db.prepare('SELECT * FROM guild_config WHERE guild_id = ?').get(guildId);
+    const schedules = db.prepare('SELECT * FROM raid_schedule WHERE guild_id = ?').all(guildId);
+    const raidDays = schedules.map(s => s.day_of_week);
+
+    // Check for conflicts with existing raid nights
+    const datesToCheck = state.mode === 'multi' ? state.dates : [state.date];
+    const conflicts = datesToCheck.filter(d => {
+      const dow = new Date(d + 'T00:00:00').getUTCDay();
+      return raidDays.includes(dow);
+    });
+
+    if (conflicts.length > 0) {
+      const conflictList = conflicts.map(d => {
+        const dow = new Date(d + 'T00:00:00').getUTCDay();
+        return `**${DAY_NAMES[dow]} (${d})**`;
+      }).join(', ');
+      const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('extra_restart').setLabel('Start Over').setStyle(ButtonStyle.Secondary)
+      );
+      return interaction.update({
+        content: `Can't propose an extra day on an existing raid night.\n\nConflicts: ${conflictList}\n\nRemove those dates and try again.`,
+        components: [backRow],
+      });
+    }
+
     const staticRoleId = config.static_member_role_id;
     const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
 

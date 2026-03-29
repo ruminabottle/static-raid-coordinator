@@ -32,6 +32,14 @@ function checkReminders(client) {
     const schedules = db.prepare('SELECT * FROM raid_schedule WHERE guild_id = ?').all(config.guild_id);
     for (const schedule of schedules) {
       const raidTime = getNextOccurrence(schedule.day_of_week, schedule.hour, schedule.minute, tz);
+      const raidDate = raidTime.toFormat('yyyy-MM-dd');
+
+      // Skip if this night is cancelled
+      const cancelled = db.prepare(
+        'SELECT id FROM cancellations WHERE guild_id = ? AND raid_date = ?'
+      ).get(config.guild_id, raidDate);
+      if (cancelled) continue;
+
       const diffMinutes = raidTime.diff(now, 'minutes').minutes;
 
       if (diffMinutes >= config.reminder_minutes - 0.5 && diffMinutes < config.reminder_minutes + 0.5) {
@@ -68,18 +76,10 @@ async function sendReminder(client, config, raidTime, isExtra = false) {
     const ts = Math.floor(raidTime.toSeconds());
     const label = isExtra ? 'Extra Raid Reminder' : 'Raid Reminder';
 
-    const cancellations = db.prepare(
-      'SELECT user_id FROM cancellations WHERE guild_id = ? AND raid_date = ?'
-    ).all(config.guild_id, raidDate);
-
-    const cancelList = cancellations.length > 0
-      ? `\n\n**Cancellations:** ${cancellations.map(c => `<@${c.user_id}>`).join(', ')}`
-      : '';
-
     const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}> ` : '';
 
     await channel.send({
-      content: `${rolePing}**${label}** — Raid starts <t:${ts}:R> at <t:${ts}:t>!${cancelList}\n\nIf you can't make it, use \`/cancel\` to let everyone know.`,
+      content: `${rolePing}**${label}** — Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`,
     });
   } catch (error) {
     console.error(`Failed to send reminder for guild ${config.guild_id}:`, error);

@@ -6,14 +6,14 @@ const { DAY_NAMES, getNextTimestamp, getNextOccurrence } = require('../timeutils
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('cancel')
-    .setDescription('Cancel your attendance for an upcoming raid night')
+    .setDescription('Cancel an upcoming raid night for the whole group')
     .addStringOption(opt =>
       opt.setName('date')
         .setDescription('Raid date (YYYY-MM-DD), or leave blank for next raid')
         .setRequired(false))
     .addStringOption(opt =>
       opt.setName('reason')
-        .setDescription('Why you can\'t make it')
+        .setDescription('Reason for cancellation')
         .setRequired(false)),
 
   async execute(interaction) {
@@ -46,11 +46,16 @@ module.exports = {
     const reason = interaction.options.getString('reason');
 
     if (!dateStr) {
-      // Find the nearest upcoming raid (regular or extra)
+      // Find the nearest upcoming raid (regular or extra), excluding already cancelled
       let nearestDt = null;
 
       for (const s of schedules) {
         const dt = getNextOccurrence(s.day_of_week, s.hour, s.minute, tz);
+        const dStr = dt.toFormat('yyyy-MM-dd');
+        const alreadyCancelled = db.prepare(
+          'SELECT id FROM cancellations WHERE guild_id = ? AND raid_date = ?'
+        ).get(guildId, dStr);
+        if (alreadyCancelled) continue;
         if (!nearestDt || dt < nearestDt) nearestDt = dt;
       }
 
@@ -73,8 +78,6 @@ module.exports = {
     }
 
     const dayOfWeek = date.getUTCDay();
-
-    // Check if it's a regular raid day OR an extra day
     const isRegularDay = schedules.some(s => s.day_of_week === dayOfWeek);
     const isExtraDay = extraDays.some(e => e.proposed_date === dateStr);
 
@@ -85,7 +88,7 @@ module.exports = {
       });
     }
 
-    // If it's an extra day (and not also a regular day), remove it entirely
+    // Extra day — remove it entirely
     if (isExtraDay && !isRegularDay) {
       const extra = extraDays.find(e => e.proposed_date === dateStr);
       const ts = getNextTimestamp(dayOfWeek, extra.hour, extra.minute, tz);
@@ -97,32 +100,41 @@ module.exports = {
       if (channel) {
         await channel.send(
           `**Extra Raid Day Cancelled**\n` +
-          `<@${userId}> can't make **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>), so the extra day has been removed.${reasonStr}`
+          `<@${userId}> has cancelled **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>). The extra day has been removed.${reasonStr}`
         );
       }
 
       return interaction.reply({ content: `Extra day **${dateStr}** has been cancelled.`, flags: 64 });
     }
 
-    // Regular raid day — record cancellation
+    // Regular raid night — cancel the entire night
+    const alreadyCancelled = db.prepare(
+      'SELECT id FROM cancellations WHERE guild_id = ? AND raid_date = ?'
+    ).get(guildId, dateStr);
+
+    if (alreadyCancelled) {
+      return interaction.reply({ content: `**${dateStr}** is already cancelled.`, flags: 64 });
+    }
+
     db.prepare(`
       INSERT INTO cancellations (guild_id, user_id, raid_date, reason)
       VALUES (?, ?, ?, ?)
-      ON CONFLICT(guild_id, user_id, raid_date) DO UPDATE SET reason = excluded.reason
     `).run(guildId, userId, dateStr, reason);
 
     const schedule = schedules.find(s => s.day_of_week === dayOfWeek);
     const ts = getNextTimestamp(schedule.day_of_week, schedule.hour, schedule.minute, tz);
     const reasonStr = reason ? `\nReason: *${reason}*` : '';
 
+    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}> ` : '';
     const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
     if (channel) {
       await channel.send(
-        `<@${userId}> has cancelled for **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>).${reasonStr}\n\n` +
-        `If the group needs to reschedule, use \`/extraday propose\` to pick a new day.`
+        `${rolePing}**Raid Night Cancelled**\n` +
+        `<@${userId}> has cancelled **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>). No raid this night.${reasonStr}\n\n` +
+        `Use \`/extraday propose\` to pick a replacement day.`
       );
     }
 
-    await interaction.reply({ content: `You've cancelled for **${dateStr}**.`, flags: 64 });
+    await interaction.reply({ content: `**${DAY_NAMES[dayOfWeek]} ${dateStr}** has been cancelled for everyone.`, flags: 64 });
   },
 };

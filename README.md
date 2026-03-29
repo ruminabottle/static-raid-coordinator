@@ -1,14 +1,15 @@
 # Static Raid Coordinator
 
-A Discord bot for coordinating FFXIV static raid schedules. Manages recurring raid nights, extra day proposals with polls, attendance tracking, reminders, and rescheduling.
+A Discord bot for coordinating FFXIV static raid schedules. Manages recurring raid nights, cancellations, extra day proposals with polls, reminders, and rescheduling.
 
 ## Features
 
 - **Interactive schedule setup** with timezone support and Discord timestamp formatting (everyone sees times in their local timezone)
 - **DST-aware scheduling** using [Luxon](https://moment.github.io/luxon/) — "9 PM Eastern" stays 9 PM Eastern year-round
-- **Extra day proposals** with optional 8-person polls, auto-closing, and non-voter pinging
+- **Extra day proposals** — propose a specific day or multiple candidate days; supports optional 8-person polls with auto-closing, non-voter pinging, and linked polls where first to 8/8 wins
 - **Raid reminders** that ping the static member role at a configurable interval before each raid
-- **Cancellation tracking** for regular nights; cancelling an extra day removes it entirely
+- **Cancellations** cancel the entire raid night and suppress reminders; extra days are removed entirely
+- **Weekly view** shows this week's actual raid lineup with cancellations and extra days
 
 ## Commands
 
@@ -19,7 +20,8 @@ A Discord bot for coordinating FFXIV static raid schedules. Manages recurring ra
 | `/setup #channel` | Admin | Initialize the bot, create roles, set announcement channel |
 | `/schedule set` | Raid Lead | Interactive raid schedule wizard (timezone, days, time) |
 | `/schedule remove <day>` | Raid Lead | Remove a day from the schedule |
-| `/schedule view` | Anyone | View the raid schedule and upcoming extra days |
+| `/schedule view` | Anyone | View the recurring weekly raid pattern |
+| `/schedule week` | Anyone | View this week's raids with cancellations and extra days |
 
 ### Reminders
 
@@ -29,18 +31,19 @@ A Discord bot for coordinating FFXIV static raid schedules. Manages recurring ra
 | `/reminder view` | Anyone | View current reminder settings |
 | `/reminder disable` | Raid Lead | Turn off reminders |
 
-### Attendance
+### Cancellations
 
 | Command | Role | Description |
 |---|---|---|
-| `/cancel [date] [reason]` | Anyone | Cancel for a raid night (defaults to next raid). Cancelling an extra day removes it entirely. |
-| `/status` | Anyone | Show who's in/out for the next raid |
+| `/cancel [date] [reason]` | Anyone | Cancel a raid night for everyone (defaults to next raid). Extra days are removed entirely. |
+| `/uncancel [date]` | Anyone | Reinstate a previously cancelled raid night |
+| `/status` | Anyone | Show the next upcoming raid |
 
 ### Extra Days
 
 | Command | Role | Description |
 |---|---|---|
-| `/extraday propose` | Anyone | Interactive wizard to propose an extra raid day with optional poll |
+| `/extraday propose` | Anyone | Interactive wizard — propose a specific day or multiple candidate days with optional poll |
 | `/extraday cancel [poll_id]` | Raid Lead | Cancel an active extra day poll |
 | `/extraday list` | Anyone | Show active extra day polls |
 
