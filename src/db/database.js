@@ -83,6 +83,7 @@ db.exec(`
     hour INTEGER NOT NULL,
     minute INTEGER NOT NULL,
     poll_enabled INTEGER NOT NULL DEFAULT 0,
+    poll_group TEXT,
     message_id TEXT,
     channel_id TEXT,
     created_at TEXT DEFAULT (datetime('now')),

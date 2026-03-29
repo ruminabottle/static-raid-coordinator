@@ -178,49 +178,93 @@ function scheduleConfirm(state) {
 
 function extraStep1() {
   return {
-    content: '**Extra Day (1/5)** — What timezone are you in?',
+    content: '**Extra Day (1/6)** — What timezone are you in?',
     components: [tzSelect('extra_tz')],
   };
 }
 
-function extraStep2(state) {
+function extraStepMode(state) {
+  const modeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('extra_mode_multi').setLabel('Propose multiple days').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('extra_mode_single').setLabel('Propose a specific day').setStyle(ButtonStyle.Secondary),
+  );
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('extra_back_1').setLabel('Back').setStyle(ButtonStyle.Secondary)
   );
   return {
-    content: `**Extra Day (2/5)** — Timezone: **${state.timezone}**\n\nWhich day?`,
+    content: `**Extra Day (2/6)** — Timezone: **${state.timezone}**\n\nHow would you like to propose?\n\n**Multiple days** — propose several options, group votes on which day works best. First to 8/8 wins.\n**Specific day** — propose a single date, optionally poll the group.`,
+    components: [modeRow, backRow],
+  };
+}
+
+function extraStepDateSingle(state) {
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('extra_back_mode').setLabel('Back').setStyle(ButtonStyle.Secondary)
+  );
+  return {
+    content: `**Extra Day (3/6)** — Pick a date.`,
     components: [dateSelect('extra_date', state.timezone), backRow],
   };
 }
 
-function extraStep3(state) {
+function extraStepDateMulti(state) {
+  const now = DateTime.now().setZone(state.timezone);
+  const options = [];
+  for (let i = 0; i < 7; i++) {
+    const day = now.plus({ days: i });
+    options.push({
+      label: day.toFormat('EEEE, MMM d'),
+      value: day.toFormat('yyyy-MM-dd'),
+    });
+  }
+  const selectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('extra_dates_multi')
+      .setPlaceholder('Select one or more days')
+      .setMinValues(1)
+      .setMaxValues(7)
+      .addOptions(options)
+  );
   const backRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('extra_back_2').setLabel('Back').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('extra_back_mode').setLabel('Back').setStyle(ButtonStyle.Secondary)
   );
   return {
-    content: `**Extra Day (3/5)** — Date: **${state.date}**\n\nWhat time? Pick the hour.`,
+    content: `**Extra Day (3/6)** — Pick the days you want to propose. The group will vote on each one.`,
+    components: [selectRow, backRow],
+  };
+}
+
+function extraStepHour(state) {
+  const dateLabel = state.mode === 'multi'
+    ? state.dates.join(', ')
+    : state.date;
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('extra_back_date').setLabel('Back').setStyle(ButtonStyle.Secondary)
+  );
+  return {
+    content: `**Extra Day (4/6)** — Date(s): **${dateLabel}**\n\nWhat time? Pick the hour.`,
     components: [hourSelect('extra_hour'), backRow],
   };
 }
 
-function extraStep4(state) {
+function extraStepTime(state) {
   const backRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('extra_back_3').setLabel('Back').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('extra_back_hour').setLabel('Back').setStyle(ButtonStyle.Secondary)
   );
   return {
-    content: `**Extra Day (4/5)** — Date: **${state.date}**, Hour: **${state.hour}**\n\nSelect minutes, then AM or PM.`,
+    content: `**Extra Day (5/6)** — Hour: **${state.hour}**\n\nSelect minutes, then AM or PM.`,
     components: [minuteSelect('extra_minute'), ampmButtons('extra'), backRow],
   };
 }
 
-function extraStep5(state) {
+function extraStepPoll(state) {
   const timeStr = formatTime(state.hour24, state.minute);
   const backRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('extra_back_4').setLabel('Back').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('extra_back_time').setLabel('Back').setStyle(ButtonStyle.Secondary)
   );
   return {
     content:
-      `**Extra Day (5/5)** — **${state.date}** at **${timeStr}**\n\n` +
+      `**Extra Day (6/6)** — Time: **${timeStr}**\n\n` +
       `Should the static be polled? (All 8 must confirm)`,
     components: [pollToggleButtons(), backRow],
   };
@@ -228,6 +272,24 @@ function extraStep5(state) {
 
 function extraConfirm(state) {
   const timeStr = formatTime(state.hour24, state.minute);
+
+  if (state.mode === 'multi') {
+    const dateLines = state.dates.map(d => {
+      const dow = new Date(d + 'T00:00:00').getUTCDay();
+      const ts = getNextTimestamp(dow, state.hour24, state.minute, state.timezone);
+      return `- **${DAY_NAMES[dow]}, ${d}** at <t:${ts}:t>`;
+    }).join('\n');
+    return {
+      content:
+        `**Extra Day — Review**\n\n` +
+        `**Timezone:** ${state.timezone}\n` +
+        `**Proposed Days:**\n${dateLines}\n` +
+        `**Poll:** Yes — first day to reach 8/8 wins, rest auto-cancel\n\n` +
+        `Does this look right?`,
+      components: [confirmEditButtons('extra')],
+    };
+  }
+
   const dayOfWeek = new Date(state.date + 'T00:00:00').getUTCDay();
   const ts = getNextTimestamp(dayOfWeek, state.hour24, state.minute, state.timezone);
   const pollLabel = state.poll ? 'Yes (8/8 required)' : 'No (just add it)';
@@ -246,5 +308,6 @@ function extraConfirm(state) {
 module.exports = {
   TIMEZONE_OPTIONS,
   scheduleStep1, scheduleStep2, scheduleStep3, scheduleStep4, scheduleConfirm,
-  extraStep1, extraStep2, extraStep3, extraStep4, extraStep5, extraConfirm,
+  extraStep1, extraStepMode, extraStepDateSingle, extraStepDateMulti,
+  extraStepHour, extraStepTime, extraStepPoll, extraConfirm,
 };

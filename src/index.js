@@ -184,31 +184,51 @@ async function handleComponent(interaction) {
   // EXTRA DAY WIZARD
   // ════════════════════════════════════════
 
-  // Step 1: timezone selected
+  // Step 1: timezone selected → mode picker
   else if (id === 'extra_tz') {
     const state = extraDayState.get(key) || {};
     state.timezone = interaction.values[0];
     extraDayState.set(key, state);
-    await interaction.update(wiz.extraStep2(state));
+    await interaction.update(wiz.extraStepMode(state));
   }
 
-  // Step 2: date selected
+  // Step 2: mode selected
+  else if (id === 'extra_mode_multi' || id === 'extra_mode_single') {
+    const state = extraDayState.get(key);
+    if (!state) return expired('extraday propose');
+    state.mode = id === 'extra_mode_multi' ? 'multi' : 'single';
+    if (state.mode === 'multi') {
+      await interaction.update(wiz.extraStepDateMulti(state));
+    } else {
+      await interaction.update(wiz.extraStepDateSingle(state));
+    }
+  }
+
+  // Step 3: single date selected
   else if (id === 'extra_date') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
     state.date = interaction.values[0];
-    await interaction.update(wiz.extraStep3(state));
+    await interaction.update(wiz.extraStepHour(state));
   }
 
-  // Step 3: hour selected
+  // Step 3: multi dates selected
+  else if (id === 'extra_dates_multi') {
+    const state = extraDayState.get(key);
+    if (!state) return expired('extraday propose');
+    state.dates = interaction.values.sort();
+    await interaction.update(wiz.extraStepHour(state));
+  }
+
+  // Step 4: hour selected
   else if (id === 'extra_hour') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
     state.hour = parseInt(interaction.values[0]);
-    await interaction.update(wiz.extraStep4(state));
+    await interaction.update(wiz.extraStepTime(state));
   }
 
-  // Step 4a: minute selected
+  // Step 5a: minute selected
   else if (id === 'extra_minute') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
@@ -219,15 +239,15 @@ async function handleComponent(interaction) {
       new ButtonBuilder().setCustomId('extra_pm').setLabel('PM').setStyle(ButtonStyle.Primary),
     );
     const backRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('extra_back_3').setLabel('Back').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('extra_back_hour').setLabel('Back').setStyle(ButtonStyle.Secondary)
     );
     await interaction.update({
-      content: `**Extra Day (4/5)** — Date: **${state.date}**, Time: **${state.hour}:${minLabel}**\n\nNow pick AM or PM.`,
+      content: `**Extra Day (5/6)** — Time: **${state.hour}:${minLabel}**\n\nNow pick AM or PM.`,
       components: [ampmRow, backRow],
     });
   }
 
-  // Step 4b: AM/PM → show poll toggle (step 5)
+  // Step 5b: AM/PM selected
   else if (id === 'extra_am' || id === 'extra_pm') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
@@ -238,10 +258,17 @@ async function handleComponent(interaction) {
     if (!isPM && hour24 === 12) hour24 = 0;
     state.hour24 = hour24;
     state.ampm = isPM ? 'PM' : 'AM';
-    await interaction.update(wiz.extraStep5(state));
+
+    // Multi mode skips poll step (always polls), single mode asks
+    if (state.mode === 'multi') {
+      state.poll = true;
+      await interaction.update(wiz.extraConfirm(state));
+    } else {
+      await interaction.update(wiz.extraStepPoll(state));
+    }
   }
 
-  // Step 5: poll toggle
+  // Step 6: poll toggle (single mode only)
   else if (id === 'extra_poll_yes' || id === 'extra_poll_no') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
@@ -249,104 +276,146 @@ async function handleComponent(interaction) {
     await interaction.update(wiz.extraConfirm(state));
   }
 
-  // Extra day back buttons
+  // Back buttons
   else if (id === 'extra_back_1') {
     await interaction.update(wiz.extraStep1());
   }
-  else if (id === 'extra_back_2') {
+  else if (id === 'extra_back_mode') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
-    await interaction.update(wiz.extraStep2(state));
+    await interaction.update(wiz.extraStepMode(state));
   }
-  else if (id === 'extra_back_3') {
+  else if (id === 'extra_back_date') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
-    await interaction.update(wiz.extraStep3(state));
+    if (state.mode === 'multi') {
+      await interaction.update(wiz.extraStepDateMulti(state));
+    } else {
+      await interaction.update(wiz.extraStepDateSingle(state));
+    }
   }
-  else if (id === 'extra_back_4') {
+  else if (id === 'extra_back_hour') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
-    await interaction.update(wiz.extraStep4(state));
+    await interaction.update(wiz.extraStepHour(state));
+  }
+  else if (id === 'extra_back_time') {
+    const state = extraDayState.get(key);
+    if (!state) return expired('extraday propose');
+    await interaction.update(wiz.extraStepTime(state));
   }
 
-  // Extra day confirm → save
+  // Confirm → save
   else if (id === 'extra_confirm') {
     const state = extraDayState.get(key);
     if (!state) return expired('extraday propose');
 
     const guildId = interaction.guild.id;
     const config = db.prepare('SELECT * FROM guild_config WHERE guild_id = ?').get(guildId);
-    const dateStr = state.date;
-    const dayOfWeek = new Date(dateStr + 'T00:00:00').getUTCDay();
-    const ts = getNextTimestamp(dayOfWeek, state.hour24, state.minute, state.timezone);
+    const staticRoleId = config.static_member_role_id;
+    const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
 
-    if (!state.poll) {
-      db.prepare(`
-        INSERT INTO extra_day_polls (guild_id, proposed_by, proposed_date, hour, minute, poll_enabled, confirmed)
-        VALUES (?, ?, ?, ?, ?, 0, 1)
-      `).run(guildId, interaction.user.id, dateStr, state.hour24, state.minute);
+    if (state.mode === 'multi') {
+      // Create a linked group of polls
+      const groupId = `group_${Date.now()}`;
+      const now = new Date();
+      const closesAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+      const pollIds = [];
 
-      const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
-      if (channel) {
-        await channel.send(
-          `**Extra Raid Day Added**\n` +
-          `<@${interaction.user.id}> has added an extra raid on:\n` +
-          `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>`
+      for (const dateStr of state.dates) {
+        const dayOfWeek = new Date(dateStr + 'T00:00:00').getUTCDay();
+        const ts = getNextTimestamp(dayOfWeek, state.hour24, state.minute, state.timezone);
+
+        const result = db.prepare(`
+          INSERT INTO extra_day_polls (guild_id, proposed_by, proposed_date, hour, minute, poll_enabled, poll_group, closes_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        `).run(guildId, interaction.user.id, dateStr, state.hour24, state.minute, groupId, closesAt);
+
+        const pollId = result.lastInsertRowid;
+        pollIds.push(pollId);
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`extra_yes_${pollId}`).setLabel('I can make it').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`extra_no_${pollId}`).setLabel("Can't make it").setStyle(ButtonStyle.Danger),
         );
+
+        const msg = await channel.send({
+          content:
+            `**Extra Raid Day — Vote** (Poll #${pollId})\n` +
+            `<@${interaction.user.id}> is proposing:\n` +
+            `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>\n\n` +
+            `<@&${staticRoleId}> — Need **8 yes** to confirm. First day to 8/8 wins!\n` +
+            `Poll closes <t:${Math.floor(new Date(closesAt).getTime() / 1000)}:R>.\n\n` +
+            `**Votes: 1/8 yes, 0 no (1/8 voted)**`,
+          components: [row],
+        });
+
+        db.prepare('UPDATE extra_day_polls SET message_id = ?, channel_id = ? WHERE id = ?')
+          .run(msg.id, channel.id, pollId);
+
+        db.prepare("INSERT INTO extra_day_votes (poll_id, user_id, vote) VALUES (?, ?, 'yes')")
+          .run(pollId, interaction.user.id);
       }
 
       extraDayState.delete(key);
       await interaction.update({
-        content: `**Extra day added for ${dateStr}** at <t:${ts}:t>!`,
+        content: `**${pollIds.length} extra day polls posted.** Your yes vote has been counted on each. First to 8/8 wins!`,
         components: [],
       });
     } else {
-      const now = new Date();
-      const closesAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+      // Single day mode
+      const dateStr = state.date;
+      const dayOfWeek = new Date(dateStr + 'T00:00:00').getUTCDay();
+      const ts = getNextTimestamp(dayOfWeek, state.hour24, state.minute, state.timezone);
 
-      const result = db.prepare(`
-        INSERT INTO extra_day_polls (guild_id, proposed_by, proposed_date, hour, minute, poll_enabled, closes_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?)
-      `).run(guildId, interaction.user.id, dateStr, state.hour24, state.minute, closesAt);
+      if (!state.poll) {
+        db.prepare(`
+          INSERT INTO extra_day_polls (guild_id, proposed_by, proposed_date, hour, minute, poll_enabled, confirmed)
+          VALUES (?, ?, ?, ?, ?, 0, 1)
+        `).run(guildId, interaction.user.id, dateStr, state.hour24, state.minute);
 
-      const pollId = result.lastInsertRowid;
+        if (channel) {
+          await channel.send(
+            `**Extra Raid Day Added**\n` +
+            `<@${interaction.user.id}> has added an extra raid on:\n` +
+            `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>`
+          );
+        }
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`extra_yes_${pollId}`)
-          .setLabel('I can make it')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`extra_no_${pollId}`)
-          .setLabel("Can't make it")
-          .setStyle(ButtonStyle.Danger),
-      );
+        extraDayState.delete(key);
+        await interaction.update({ content: `**Extra day added for ${dateStr}** at <t:${ts}:t>!`, components: [] });
+      } else {
+        const now = new Date();
+        const closesAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-      const staticRoleId = config.static_member_role_id;
-      const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
-      const msg = await channel.send({
-        content:
-          `**Extra Raid Day — Vote Required** (Poll #${pollId})\n` +
-          `<@${interaction.user.id}> is proposing an extra raid on:\n` +
-          `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>\n\n` +
-          `All 8 <@&${staticRoleId}> members must vote. Need **8 yes** votes to confirm.\n` +
-          `Poll closes <t:${Math.floor(new Date(closesAt).getTime() / 1000)}:R>.\n\n` +
-          `**Votes: 1/8 yes, 0 no (1/8 voted)**`,
-        components: [row],
-      });
+        const result = db.prepare(`
+          INSERT INTO extra_day_polls (guild_id, proposed_by, proposed_date, hour, minute, poll_enabled, closes_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?)
+        `).run(guildId, interaction.user.id, dateStr, state.hour24, state.minute, closesAt);
 
-      db.prepare('UPDATE extra_day_polls SET message_id = ?, channel_id = ? WHERE id = ?')
-        .run(msg.id, channel.id, pollId);
+        const pollId = result.lastInsertRowid;
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`extra_yes_${pollId}`).setLabel('I can make it').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`extra_no_${pollId}`).setLabel("Can't make it").setStyle(ButtonStyle.Danger),
+        );
 
-      db.prepare(`
-        INSERT INTO extra_day_votes (poll_id, user_id, vote) VALUES (?, ?, 'yes')
-      `).run(pollId, interaction.user.id);
+        const msg = await channel.send({
+          content:
+            `**Extra Raid Day — Vote Required** (Poll #${pollId})\n` +
+            `<@${interaction.user.id}> is proposing an extra raid on:\n` +
+            `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>\n\n` +
+            `All 8 <@&${staticRoleId}> members must vote. Need **8 yes** votes to confirm.\n` +
+            `Poll closes <t:${Math.floor(new Date(closesAt).getTime() / 1000)}:R>.\n\n` +
+            `**Votes: 1/8 yes, 0 no (1/8 voted)**`,
+          components: [row],
+        });
 
-      extraDayState.delete(key);
-      await interaction.update({
-        content: `**Extra day poll #${pollId} posted.** Your vote has been counted as yes.`,
-        components: [],
-      });
+        db.prepare('UPDATE extra_day_polls SET message_id = ?, channel_id = ? WHERE id = ?').run(msg.id, channel.id, pollId);
+        db.prepare("INSERT INTO extra_day_votes (poll_id, user_id, vote) VALUES (?, ?, 'yes')").run(pollId, interaction.user.id);
+
+        extraDayState.delete(key);
+        await interaction.update({ content: `**Extra day poll #${pollId} posted.** Your vote has been counted as yes.`, components: [] });
+      }
     }
   }
 
@@ -407,6 +476,23 @@ async function handleComponent(interaction) {
           const msg = await channel.messages.fetch(poll.message_id);
           await msg.edit({ components: [] });
         } catch (e) { console.error(e); }
+
+        // If this poll is part of a group, auto-cancel the siblings
+        if (poll.poll_group) {
+          const siblings = db.prepare(
+            'SELECT * FROM extra_day_polls WHERE poll_group = ? AND id != ? AND closed = 0'
+          ).all(poll.poll_group, pollId);
+
+          for (const sib of siblings) {
+            db.prepare('UPDATE extra_day_polls SET closed = 1 WHERE id = ?').run(sib.id);
+            try {
+              const ch = await interaction.client.channels.fetch(sib.channel_id);
+              const m = await ch.messages.fetch(sib.message_id);
+              await m.edit({ components: [] });
+              await ch.send(`**Poll #${sib.id} (${sib.proposed_date}) auto-cancelled** — **${poll.proposed_date}** was confirmed first.`);
+            } catch (e) { console.error(e); }
+          }
+        }
       } else {
         db.prepare('UPDATE extra_day_polls SET closed = 1 WHERE id = ?').run(pollId);
         try {
