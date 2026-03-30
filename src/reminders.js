@@ -43,6 +43,12 @@ function checkReminders(client) {
 
       const diffMinutes = raidTime.diff(now, 'minutes').minutes;
 
+      // Auto start-time message (always, no ping)
+      if (diffMinutes >= -0.5 && diffMinutes < 0.5) {
+        sendStartMessage(client, config, raidTime);
+      }
+
+      // User-configured reminders
       for (const rt of reminderTimes) {
         if (diffMinutes >= rt.minutes - 0.5 && diffMinutes < rt.minutes + 0.5) {
           sendReminder(client, config, raidTime, rt.minutes);
@@ -63,6 +69,12 @@ function checkReminders(client) {
 
       const diffMinutes = extraDate.diff(now, 'minutes').minutes;
 
+      // Auto start-time message (always, no ping)
+      if (diffMinutes >= -0.5 && diffMinutes < 0.5) {
+        sendStartMessage(client, config, extraDate, true);
+      }
+
+      // User-configured reminders
       for (const rt of reminderTimes) {
         if (diffMinutes >= rt.minutes - 0.5 && diffMinutes < rt.minutes + 0.5) {
           sendReminder(client, config, extraDate, rt.minutes, true);
@@ -94,10 +106,8 @@ async function sendReminder(client, config, raidTime, minutesBefore, isExtra = f
     const embed = new EmbedBuilder()
       .setColor(0xF39C12)
       .setTitle(label)
-      .setDescription(minutesBefore === 0
-        ? `Raid is starting now at <t:${ts}:t>!`
-        : `Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`)
-      .setFooter({ text: minutesBefore === 0 ? 'Raid starting now!' : `${formatMinutes(minutesBefore)} reminder` });
+      .setDescription(`Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`)
+      .setFooter({ text: `${formatMinutes(minutesBefore)} reminder` });
 
     await channel.send({
       content: rolePing || undefined,
@@ -105,6 +115,25 @@ async function sendReminder(client, config, raidTime, minutesBefore, isExtra = f
     });
   } catch (error) {
     console.error(`Failed to send reminder for guild ${config.guild_id}:`, error);
+  }
+}
+
+async function sendStartMessage(client, config, raidTime, isExtra = false) {
+  try {
+    const channel = await client.channels.fetch(config.reminder_channel_id);
+    if (!channel) return;
+
+    const ts = Math.floor(raidTime.toSeconds());
+    const label = isExtra ? 'Extra Raid Night — Started!' : 'Raid Night — Started!';
+
+    const embed = new EmbedBuilder()
+      .setColor(0x2ECC71)
+      .setTitle(label)
+      .setDescription(`Raid is starting now! <t:${ts}:t>\n\nGood luck and have fun!`);
+
+    await channel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error(`Failed to send start message for guild ${config.guild_id}:`, error);
   }
 }
 

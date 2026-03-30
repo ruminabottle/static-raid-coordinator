@@ -21,7 +21,7 @@ module.exports = {
           opt.setName('minutes')
             .setDescription('How many minutes before raid to send reminder')
             .setRequired(true)
-            .setMinValue(0)
+            .setMinValue(1)
             .setMaxValue(1440)))
     .addSubcommand(sub =>
       sub.setName('remove')
