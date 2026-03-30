@@ -24,7 +24,8 @@ function checkReminders(client) {
   const guilds = db.prepare('SELECT * FROM guild_config WHERE reminder_channel_id IS NOT NULL').all();
 
   for (const config of guilds) {
-    if (!config.reminder_minutes || config.reminder_minutes === 0) continue;
+    const reminderTimes = db.prepare('SELECT minutes FROM reminder_times WHERE guild_id = ?').all(config.guild_id);
+    if (reminderTimes.length === 0) continue;
 
     const tz = config.timezone || 'America/New_York';
     const now = DateTime.now().setZone(tz);
@@ -35,7 +36,6 @@ function checkReminders(client) {
       const raidTime = getNextOccurrence(schedule.day_of_week, schedule.hour, schedule.minute, tz);
       const raidDate = raidTime.toFormat('yyyy-MM-dd');
 
-      // Skip if this night is cancelled
       const cancelled = db.prepare(
         'SELECT id FROM cancellations WHERE guild_id = ? AND raid_date = ?'
       ).get(config.guild_id, raidDate);
@@ -43,8 +43,10 @@ function checkReminders(client) {
 
       const diffMinutes = raidTime.diff(now, 'minutes').minutes;
 
-      if (diffMinutes >= config.reminder_minutes - 0.5 && diffMinutes < config.reminder_minutes + 0.5) {
-        sendReminder(client, config, raidTime);
+      for (const rt of reminderTimes) {
+        if (diffMinutes >= rt.minutes - 0.5 && diffMinutes < rt.minutes + 0.5) {
+          sendReminder(client, config, raidTime, rt.minutes);
+        }
       }
     }
 
@@ -57,23 +59,33 @@ function checkReminders(client) {
       const extraDate = DateTime.fromISO(extra.proposed_date, { zone: tz })
         .set({ hour: extra.hour, minute: extra.minute, second: 0 });
 
-      // Only check if the extra day is in the future
       if (extraDate <= now) continue;
 
       const diffMinutes = extraDate.diff(now, 'minutes').minutes;
-      if (diffMinutes >= config.reminder_minutes - 0.5 && diffMinutes < config.reminder_minutes + 0.5) {
-        sendReminder(client, config, extraDate, true);
+
+      for (const rt of reminderTimes) {
+        if (diffMinutes >= rt.minutes - 0.5 && diffMinutes < rt.minutes + 0.5) {
+          sendReminder(client, config, extraDate, rt.minutes, true);
+        }
       }
     }
   }
 }
 
-async function sendReminder(client, config, raidTime, isExtra = false) {
+function formatMinutes(minutes) {
+  if (minutes >= 60) {
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+  }
+  return `${minutes}m`;
+}
+
+async function sendReminder(client, config, raidTime, minutesBefore, isExtra = false) {
   try {
     const channel = await client.channels.fetch(config.reminder_channel_id);
     if (!channel) return;
 
-    const raidDate = raidTime.toFormat('yyyy-MM-dd');
     const ts = Math.floor(raidTime.toSeconds());
     const label = isExtra ? 'Extra Raid Reminder' : 'Raid Reminder';
 
@@ -82,7 +94,10 @@ async function sendReminder(client, config, raidTime, isExtra = false) {
     const embed = new EmbedBuilder()
       .setColor(0xF39C12)
       .setTitle(label)
-      .setDescription(`Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`);
+      .setDescription(minutesBefore === 0
+        ? `Raid is starting now at <t:${ts}:t>!`
+        : `Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`)
+      .setFooter({ text: minutesBefore === 0 ? 'Raid starting now!' : `${formatMinutes(minutesBefore)} reminder` });
 
     await channel.send({
       content: rolePing || undefined,
