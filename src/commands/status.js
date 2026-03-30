@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { DateTime } = require('luxon');
 const db = require('../db/database');
 const { DAY_NAMES, getNextOccurrence } = require('../timeutils');
@@ -60,9 +60,11 @@ module.exports = {
     const ts = Math.floor(nearestDt.toSeconds());
     const label = nearest.extra ? ' *(extra)* ' : ' ';
 
-    await interaction.reply(
-      `**Next Raid: ${DAY_NAMES[nearest.day_of_week]}, ${nextDate}**${label}at <t:${ts}:t> (<t:${ts}:R>)\n\n` +
-      `Raid is on! Use \`/cancel\` to cancel the night if needed.`
-    );
+    const embed = new EmbedBuilder()
+      .setColor(0x3498DB)
+      .setTitle(`Next Raid: ${DAY_NAMES[nearest.day_of_week]}, ${nextDate}${label}`)
+      .setDescription(`At <t:${ts}:t> (<t:${ts}:R>)\n\nRaid is on! Use \`/cancel\` to cancel the night if needed.`);
+
+    await interaction.reply({ embeds: [embed] });
   },
 };

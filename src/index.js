@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   Client, Collection, GatewayIntentBits,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
 } = require('discord.js');
 const db = require('./db/database');
 const { startReminders } = require('./reminders');
@@ -363,14 +363,19 @@ async function handleComponent(interaction) {
           new ButtonBuilder().setCustomId(`extra_no_${pollId}`).setLabel("Can't make it").setStyle(ButtonStyle.Danger),
         );
 
-        const msg = await channel.send({
-          content:
-            `**Extra Raid Day — Vote** (Poll #${pollId})\n` +
+        const pollEmbed = new EmbedBuilder()
+          .setColor(0x9B59B6)
+          .setTitle(`Extra Raid Day — Vote (Poll #${pollId})`)
+          .setDescription(
             `<@${interaction.user.id}> is proposing:\n` +
             `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>\n\n` +
             `<@&${staticRoleId}> — Need **8 yes** to confirm. First day to 8/8 wins!\n` +
             `Poll closes <t:${Math.floor(new Date(closesAt).getTime() / 1000)}:R>.\n\n` +
-            `**Votes: 1/8 yes, 0 no (1/8 voted)**`,
+            `**Votes: 1/8 yes, 0 no (1/8 voted)**`
+          );
+
+        const msg = await channel.send({
+          embeds: [pollEmbed],
           components: [row],
         });
 
@@ -399,11 +404,11 @@ async function handleComponent(interaction) {
         `).run(guildId, interaction.user.id, dateStr, state.hour24, state.minute);
 
         if (channel) {
-          await channel.send(
-            `**Extra Raid Day Added**\n` +
-            `<@${interaction.user.id}> has added an extra raid on:\n` +
-            `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>`
-          );
+          const embed = new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setTitle('Extra Raid Day Added')
+            .setDescription(`<@${interaction.user.id}> has added an extra raid on:\n**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>`);
+          await channel.send({ embeds: [embed] });
         }
 
         extraDayState.delete(key);
@@ -423,14 +428,19 @@ async function handleComponent(interaction) {
           new ButtonBuilder().setCustomId(`extra_no_${pollId}`).setLabel("Can't make it").setStyle(ButtonStyle.Danger),
         );
 
-        const msg = await channel.send({
-          content:
-            `**Extra Raid Day — Vote Required** (Poll #${pollId})\n` +
+        const singlePollEmbed = new EmbedBuilder()
+          .setColor(0x9B59B6)
+          .setTitle(`Extra Raid Day — Vote Required (Poll #${pollId})`)
+          .setDescription(
             `<@${interaction.user.id}> is proposing an extra raid on:\n` +
             `**${DAY_NAMES[dayOfWeek]}, ${dateStr}** at <t:${ts}:t>\n\n` +
             `All 8 <@&${staticRoleId}> members must vote. Need **8 yes** votes to confirm.\n` +
             `Poll closes <t:${Math.floor(new Date(closesAt).getTime() / 1000)}:R>.\n\n` +
-            `**Votes: 1/8 yes, 0 no (1/8 voted)**`,
+            `**Votes: 1/8 yes, 0 no (1/8 voted)**`
+          );
+
+        const msg = await channel.send({
+          embeds: [singlePollEmbed],
           components: [row],
         });
 
@@ -481,8 +491,12 @@ async function handleComponent(interaction) {
     try {
       const channel = await interaction.client.channels.fetch(poll.channel_id);
       const msg = await channel.messages.fetch(poll.message_id);
-      const updatedContent = msg.content.replace(/\*\*Votes:.*\*\*/, `**Votes: ${yes}/8 yes, ${no} no (${total}/8 voted)**`);
-      await msg.edit({ content: updatedContent, components: msg.components });
+      if (msg.embeds.length > 0) {
+        const oldEmbed = msg.embeds[0];
+        const updatedDesc = oldEmbed.description.replace(/\*\*Votes:.*\*\*/, `**Votes: ${yes}/8 yes, ${no} no (${total}/8 voted)**`);
+        const newEmbed = EmbedBuilder.from(oldEmbed).setDescription(updatedDesc);
+        await msg.edit({ embeds: [newEmbed], components: msg.components });
+      }
     } catch (e) {
       console.error('Failed to update poll message:', e);
     }
@@ -496,7 +510,11 @@ async function handleComponent(interaction) {
         db.prepare('UPDATE extra_day_polls SET confirmed = 1, closed = 1 WHERE id = ?').run(pollId);
         try {
           const channel = await interaction.client.channels.fetch(poll.channel_id);
-          await channel.send(`**Extra Raid Day Confirmed!**\nAll 8 members confirmed. See you on **${poll.proposed_date}** at <t:${ts}:t>!`);
+          const confirmedEmbed = new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setTitle('Extra Raid Day Confirmed!')
+            .setDescription(`All 8 members confirmed. See you on **${poll.proposed_date}** at <t:${ts}:t>!`);
+          await channel.send({ embeds: [confirmedEmbed] });
           const msg = await channel.messages.fetch(poll.message_id);
           await msg.edit({ components: [] });
         } catch (e) { console.error(e); }
@@ -513,7 +531,11 @@ async function handleComponent(interaction) {
               const ch = await interaction.client.channels.fetch(sib.channel_id);
               const m = await ch.messages.fetch(sib.message_id);
               await m.edit({ components: [] });
-              await ch.send(`**Poll #${sib.id} (${sib.proposed_date}) auto-cancelled** — **${poll.proposed_date}** was confirmed first.`);
+              const sibEmbed = new EmbedBuilder()
+                .setColor(0x3498DB)
+                .setTitle(`Poll #${sib.id} (${sib.proposed_date}) auto-cancelled`)
+                .setDescription(`**${poll.proposed_date}** was confirmed first.`);
+              await ch.send({ embeds: [sibEmbed] });
             } catch (e) { console.error(e); }
           }
         }
@@ -521,7 +543,11 @@ async function handleComponent(interaction) {
         db.prepare('UPDATE extra_day_polls SET closed = 1 WHERE id = ?').run(pollId);
         try {
           const channel = await interaction.client.channels.fetch(poll.channel_id);
-          await channel.send(`**Extra Raid Day Not Confirmed**\nAll 8 voted for **${poll.proposed_date}**: **${yes}** yes / **${no}** no. Needed 8/8 yes.`);
+          const notConfirmedEmbed = new EmbedBuilder()
+            .setColor(0xE74C3C)
+            .setTitle('Extra Raid Day Not Confirmed')
+            .setDescription(`All 8 voted for **${poll.proposed_date}**: **${yes}** yes / **${no}** no. Needed 8/8 yes.`);
+          await channel.send({ embeds: [notConfirmedEmbed] });
           const msg = await channel.messages.fetch(poll.message_id);
           await msg.edit({ components: [] });
         } catch (e) { console.error(e); }

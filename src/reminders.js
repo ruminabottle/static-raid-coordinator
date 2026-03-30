@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const { DateTime } = require('luxon');
+const { EmbedBuilder } = require('discord.js');
 const db = require('./db/database');
 const { DAY_NAMES, getNextOccurrence } = require('./timeutils');
 
@@ -76,10 +77,16 @@ async function sendReminder(client, config, raidTime, isExtra = false) {
     const ts = Math.floor(raidTime.toSeconds());
     const label = isExtra ? 'Extra Raid Reminder' : 'Raid Reminder';
 
-    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}> ` : '';
+    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}>` : '';
+
+    const embed = new EmbedBuilder()
+      .setColor(0xF39C12)
+      .setTitle(label)
+      .setDescription(`Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`);
 
     await channel.send({
-      content: `${rolePing}**${label}** — Raid starts <t:${ts}:R> at <t:${ts}:t>!\n\nIf the group needs to cancel, use \`/cancel\`.`,
+      content: rolePing || undefined,
+      embeds: [embed],
     });
   } catch (error) {
     console.error(`Failed to send reminder for guild ${config.guild_id}:`, error);

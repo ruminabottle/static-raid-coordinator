@@ -1,5 +1,14 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../db/database');
+
+function formatMinutes(minutes) {
+  if (minutes >= 60) {
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+  }
+  return `${minutes}m`;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -41,36 +50,33 @@ module.exports = {
       const minutes = interaction.options.getInteger('minutes');
       db.prepare('UPDATE guild_config SET reminder_minutes = ? WHERE guild_id = ?').run(minutes, guildId);
 
-      let display;
-      if (minutes >= 60) {
-        const hrs = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        display = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-      } else {
-        display = `${minutes}m`;
-      }
-
-      await interaction.reply(`Raid reminders set to **${display}** before raid time.`);
+      const embed = new EmbedBuilder()
+        .setColor(0x2ECC71)
+        .setTitle('Reminder Updated')
+        .setDescription(`Raid reminders set to **${formatMinutes(minutes)}** before raid time.`);
+      await interaction.reply({ embeds: [embed] });
     } else if (sub === 'view') {
       const minutes = config.reminder_minutes;
       const channel = config.reminder_channel_id ? `<#${config.reminder_channel_id}>` : 'Not set';
 
+      const embed = new EmbedBuilder()
+        .setColor(0x3498DB)
+        .setTitle('Reminder Settings');
+
       if (minutes === 0) {
-        await interaction.reply(`**Reminders:** Disabled\n**Channel:** ${channel}`);
+        embed.setDescription(`**Status:** Disabled\n**Channel:** ${channel}`);
       } else {
-        let display;
-        if (minutes >= 60) {
-          const hrs = Math.floor(minutes / 60);
-          const mins = minutes % 60;
-          display = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-        } else {
-          display = `${minutes}m`;
-        }
-        await interaction.reply(`**Reminders:** ${display} before raid\n**Channel:** ${channel}`);
+        embed.setDescription(`**Timing:** ${formatMinutes(minutes)} before raid\n**Channel:** ${channel}`);
       }
+      await interaction.reply({ embeds: [embed] });
     } else if (sub === 'disable') {
       db.prepare('UPDATE guild_config SET reminder_minutes = 0 WHERE guild_id = ?').run(guildId);
-      await interaction.reply('Raid reminders have been **disabled**. Use `/reminder set` to re-enable.');
+
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('Reminders Disabled')
+        .setDescription('Raid reminders have been turned off. Use `/reminder set` to re-enable.');
+      await interaction.reply({ embeds: [embed] });
     }
   },
 };

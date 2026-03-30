@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../db/database');
 const { DAY_NAMES, getNextTimestamp } = require('../timeutils');
 const { extraStep1 } = require('../wizards');
@@ -70,10 +70,11 @@ async function handleCancel(interaction, config) {
     const channel = await interaction.client.channels.fetch(poll.channel_id);
     const msg = await channel.messages.fetch(poll.message_id);
     await msg.edit({ components: [] });
-    await channel.send(
-      `**Extra Raid Day Poll #${poll.id} Cancelled**\n` +
-      `The poll for **${poll.proposed_date}** was cancelled by <@${interaction.user.id}>.`
-    );
+    const cancelEmbed = new EmbedBuilder()
+      .setColor(0xE74C3C)
+      .setTitle(`Extra Raid Day Poll #${poll.id} Cancelled`)
+      .setDescription(`The poll for **${poll.proposed_date}** was cancelled by <@${interaction.user.id}>.`);
+    await channel.send({ embeds: [cancelEmbed] });
   } catch (e) {
     console.error('Failed to update cancelled poll message:', e);
   }
@@ -96,5 +97,9 @@ async function handleList(interaction, config) {
     return `- **#${p.id}** — ${p.proposed_date}: ${yes} yes / ${no} no — closes <t:${closesTs}:R>`;
   });
 
-  await interaction.reply(`**Active Extra Day Polls**\n${lines.join('\n')}`);
+  const embed = new EmbedBuilder()
+    .setColor(0x9B59B6)
+    .setTitle('Active Extra Day Polls')
+    .setDescription(lines.join('\n'));
+  await interaction.reply({ embeds: [embed] });
 }
