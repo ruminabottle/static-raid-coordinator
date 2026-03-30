@@ -18,9 +18,10 @@ module.exports = {
         `\`/schedule week\` — View this week's raids with cancellations and extra days\n\n` +
 
         `**Reminders**\n` +
-        `\`/reminder set <minutes>\` — Set how far in advance reminders fire *(Raid Lead)*\n` +
+        `\`/reminder add <minutes>\` — Add a reminder time before raids *(Raid Lead)*\n` +
+        `\`/reminder remove <minutes>\` — Remove a reminder time *(Raid Lead)*\n` +
         `\`/reminder view\` — View current reminder settings\n` +
-        `\`/reminder disable\` — Turn off reminders *(Raid Lead)*\n\n` +
+        `\`/reminder clear\` — Remove all reminders *(Raid Lead)*\n\n` +
 
         `**Attendance**\n` +
         `\`/cancel [date] [reason]\` — Cancel a raid night for everyone (defaults to next raid)\n` +

@@ -12,7 +12,6 @@ db.exec(`
     raid_lead_role_id TEXT,
     static_member_role_id TEXT,
     reminder_channel_id TEXT,
-    reminder_minutes INTEGER DEFAULT 60,
     timezone TEXT DEFAULT 'America/New_York'
   );
 
@@ -100,6 +99,14 @@ db.exec(`
     vote TEXT NOT NULL,  -- 'yes' or 'no'
     FOREIGN KEY (poll_id) REFERENCES extra_day_polls(id),
     UNIQUE(poll_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS reminder_times (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    minutes INTEGER NOT NULL,
+    FOREIGN KEY (guild_id) REFERENCES guild_config(guild_id),
+    UNIQUE(guild_id, minutes)
   );
 `);
 
