@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { DateTime } = require('luxon');
 const db = require('../db/database');
 const { DAY_NAMES, getNextTimestamp } = require('../timeutils');
@@ -55,13 +55,17 @@ module.exports = {
       timeInfo = ` at <t:${ts}:t>`;
     }
 
-    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}> ` : '';
+    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}>` : '';
     const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
     if (channel) {
-      await channel.send(
-        `${rolePing}**Raid Night Back On!**\n` +
-        `<@${interaction.user.id}> has reinstated **${DAY_NAMES[dayOfWeek]} ${dateStr}**${timeInfo}. Raid is happening!`
-      );
+      const embed = new EmbedBuilder()
+        .setColor(0x2ECC71)
+        .setTitle('Raid Night Back On!')
+        .setDescription(`<@${interaction.user.id}> has reinstated **${DAY_NAMES[dayOfWeek]} ${dateStr}**${timeInfo}. Raid is happening!`);
+      await channel.send({
+        content: rolePing || undefined,
+        embeds: [embed],
+      });
     }
 
     await interaction.reply({ content: `**${DAY_NAMES[dayOfWeek]} ${dateStr}** is back on!`, flags: 64 });

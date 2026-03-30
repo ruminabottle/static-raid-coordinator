@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const { EmbedBuilder } = require('discord.js');
 const db = require('./db/database');
 const { getNextTimestamp } = require('./timeutils');
 
@@ -67,16 +68,17 @@ async function closePoll(client, poll) {
       const tz = config?.timezone || 'America/New_York';
       const ts = getNextTimestamp(new Date(poll.proposed_date + 'T00:00:00').getUTCDay(), poll.hour, poll.minute, tz);
 
-      await channel.send(
-        `**Extra Raid Day Confirmed!**\n` +
-        `All 8 members confirmed. See you on **${poll.proposed_date}** at <t:${ts}:t>!`
-      );
+      const confirmedEmbed = new EmbedBuilder()
+        .setColor(0x2ECC71)
+        .setTitle('Extra Raid Day Confirmed!')
+        .setDescription(`All 8 members confirmed. See you on **${poll.proposed_date}** at <t:${ts}:t>!`);
+      await channel.send({ embeds: [confirmedEmbed] });
     } else {
-      await channel.send(
-        `**Extra Raid Day Poll Closed**\n` +
-        `The poll for **${poll.proposed_date}** has expired.\n` +
-        `Result: **${yes}** yes / **${no}** no — needed 8 yes votes. **Not confirmed.**`
-      );
+      const closedEmbed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('Extra Raid Day Poll Closed')
+        .setDescription(`The poll for **${poll.proposed_date}** has expired.\nResult: **${yes}** yes / **${no}** no — needed 8 yes votes. **Not confirmed.**`);
+      await channel.send({ embeds: [closedEmbed] });
     }
 
     // Remove buttons from poll message
@@ -113,11 +115,15 @@ async function pingNonVoters(client, poll) {
     const channel = await client.channels.fetch(poll.channel_id);
     const mentions = nonVoters.map(m => `<@${m.id}>`).join(' ');
 
-    await channel.send(
-      `**Reminder:** The extra raid day poll for **${poll.proposed_date}** still needs your vote!\n` +
-      `${mentions}\n\n` +
-      `Please vote above. Poll closes <t:${Math.floor(new Date(poll.closes_at).getTime() / 1000)}:R>.`
-    );
+    const reminderEmbed = new EmbedBuilder()
+      .setColor(0xF39C12)
+      .setTitle('Vote Reminder')
+      .setDescription(`The extra raid day poll for **${poll.proposed_date}** still needs your vote!\n\nPlease vote above. Poll closes <t:${Math.floor(new Date(poll.closes_at).getTime() / 1000)}:R>.`);
+
+    await channel.send({
+      content: mentions,
+      embeds: [reminderEmbed],
+    });
 
     // Update last ping time
     db.prepare('UPDATE extra_day_polls SET last_ping_at = ? WHERE id = ?')

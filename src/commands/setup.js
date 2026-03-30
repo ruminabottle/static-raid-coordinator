@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../db/database');
 
 module.exports = {
@@ -52,13 +52,17 @@ module.exports = {
     await interaction.member.roles.add(raidLeadRole);
     await interaction.member.roles.add(staticMemberRole);
 
-    await interaction.editReply(
-      `Setup complete!\n` +
-      `- **Raid Lead** role created and assigned to you\n` +
-      `- **Static Member** role created and assigned to you\n` +
-      `- Reminders will post in ${channel}\n` +
-      `- Assign the **Static Member** role to your 7 other raiders\n` +
-      `- Use \`/schedule set\` to configure raid days`
-    );
+    const embed = new EmbedBuilder()
+      .setColor(0x2ECC71)
+      .setTitle('Setup Complete!')
+      .setDescription(
+        `- **Raid Lead** role created and assigned to you\n` +
+        `- **Static Member** role created and assigned to you\n` +
+        `- Reminders will post in ${channel}\n\n` +
+        `**Next steps:**\n` +
+        `1. Assign the **Static Member** role to your 7 other raiders\n` +
+        `2. Run \`/schedule set\` to configure raid days`
+      );
+    await interaction.editReply({ embeds: [embed] });
   },
 };

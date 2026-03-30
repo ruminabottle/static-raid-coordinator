@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { DateTime } = require('luxon');
 const db = require('../db/database');
 const { DAY_NAMES, getNextTimestamp, getNextOccurrence } = require('../timeutils');
@@ -98,10 +98,11 @@ module.exports = {
 
       const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
       if (channel) {
-        await channel.send(
-          `**Extra Raid Day Cancelled**\n` +
-          `<@${userId}> has cancelled **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>). The extra day has been removed.${reasonStr}`
-        );
+        const embed = new EmbedBuilder()
+          .setColor(0xE74C3C)
+          .setTitle('Extra Raid Day Cancelled')
+          .setDescription(`<@${userId}> has cancelled **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>). The extra day has been removed.${reasonStr}`);
+        await channel.send({ embeds: [embed] });
       }
 
       return interaction.reply({ content: `Extra day **${dateStr}** has been cancelled.`, flags: 64 });
@@ -125,14 +126,17 @@ module.exports = {
     const ts = getNextTimestamp(schedule.day_of_week, schedule.hour, schedule.minute, tz);
     const reasonStr = reason ? `\nReason: *${reason}*` : '';
 
-    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}> ` : '';
+    const rolePing = config.static_member_role_id ? `<@&${config.static_member_role_id}>` : '';
     const channel = await interaction.client.channels.fetch(config.reminder_channel_id);
     if (channel) {
-      await channel.send(
-        `${rolePing}**Raid Night Cancelled**\n` +
-        `<@${userId}> has cancelled **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>). No raid this night.${reasonStr}\n\n` +
-        `Use \`/extraday propose\` to pick a replacement day.`
-      );
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('Raid Night Cancelled')
+        .setDescription(`<@${userId}> has cancelled **${DAY_NAMES[dayOfWeek]} ${dateStr}** (<t:${ts}:t>). No raid this night.${reasonStr}\n\nUse \`/extraday propose\` to pick a replacement day.`);
+      await channel.send({
+        content: rolePing || undefined,
+        embeds: [embed],
+      });
     }
 
     await interaction.reply({ content: `**${DAY_NAMES[dayOfWeek]} ${dateStr}** has been cancelled for everyone.`, flags: 64 });

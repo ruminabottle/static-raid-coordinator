@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { DateTime } = require('luxon');
 const db = require('../db/database');
 const { DAY_NAMES, getNextTimestamp, getNextOccurrence, formatTime } = require('../timeutils');
@@ -56,7 +56,11 @@ module.exports = {
       if (result.changes === 0) {
         return interaction.reply({ content: `No raid was scheduled on ${DAY_NAMES[day]}.`, flags: 64 });
       }
-      await interaction.reply(`Removed **${DAY_NAMES[day]}** from the raid schedule.`);
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C)
+        .setTitle('Raid Day Removed')
+        .setDescription(`**${DAY_NAMES[day]}** has been removed from the raid schedule.`);
+      await interaction.reply({ embeds: [embed] });
     } else if (sub === 'view') {
       await handleView(interaction, guildId);
     } else if (sub === 'week') {
@@ -82,7 +86,12 @@ async function handleView(interaction, guildId) {
     return `- **${DAY_NAMES[s.day_of_week]}** at ${timeStr} (<t:${ts}:t> your time)`;
   });
 
-  await interaction.reply(`**Weekly Raid Schedule** (${tz})\n${lines.join('\n')}`);
+  const embed = new EmbedBuilder()
+    .setColor(0x3498DB)
+    .setTitle(`Weekly Raid Schedule`)
+    .setDescription(lines.join('\n'))
+    .setFooter({ text: `Timezone: ${tz}` });
+  await interaction.reply({ embeds: [embed] });
 }
 
 // This week's actual lineup
@@ -172,5 +181,9 @@ async function handleWeek(interaction, guildId) {
     return line;
   });
 
-  await interaction.reply(`**This Week's Raids**\n${lines.join('\n')}`);
+  const embed = new EmbedBuilder()
+    .setColor(0x3498DB)
+    .setTitle("This Week's Raids")
+    .setDescription(lines.join('\n'));
+  await interaction.reply({ embeds: [embed] });
 }
